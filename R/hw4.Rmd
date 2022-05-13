@@ -1,0 +1,114 @@
+---
+title: "hw4"
+output: pdf_document
+---
+by Jonathan Franco
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Reading in the data
+
+creating new terms as well
+
+```{r reading in the data}
+cd = read.csv("http://www.rob-mcculloch.org/data/susedcars.csv")
+cd$price = cd$price/1000
+cd$mileage = cd$mileage/1000
+iifac = c(2,3,6,7)
+for(i in iifac) cd[,i] = as.factor(cd[,i])
+cd$mileagesq = cd$mileage^2
+cd$mileagecb = cd$mileage^3
+cd$mileagefr = cd$mileage^4
+cd$yearsq = cd$year^2
+cd$yearcb = cd$year^3
+cd$yearfr = cd$year^4
+cd$milexyear = cd$year * cd$mileage
+head(cd)
+
+```
+
+## Testing categorical values
+
+This is to see how much they could matter
+
+```{r }
+treg = lm(price~mileage+trim, cd)
+oreg = lm(price~mileage+isOneOwner, cd)
+creg = lm(price~mileage+color, cd)
+dreg = lm(price~mileage+displacement, cd)
+plot(cd$mileage, treg$fitted.values,col= as.integer(cd$trim))
+plot(cd$mileage, oreg$fitted.values,col= as.integer(cd$isOneOwner))
+plot(cd$mileage, creg$fitted.values,col= as.integer(cd$color))
+plot(cd$mileage, dreg$fitted.values,col= as.integer(cd$displacement))
+
+```
+
+
+## train/test split
+
+
+```{r}
+n = nrow(cd)
+pin = .75
+ii = sample(1:n, floor(pin*n))
+cdtr = cd[ii,]
+cdte = cd[-ii,]
+```
+
+
+
+## making the model
+
+
+```{r, message=FALSE}
+library(glmnet)
+y = cdtr$price
+x = model.matrix(price~.,cdtr)[,-1]
+xtest = model.matrix(price~.,cdte)[,-1]
+head(x)
+```
+
+
+## Running Lasso
+
+
+```{r }
+set.seed(14)
+cars.gcv = cv.glmnet(x, y, type.measure = "mse", nfolds = 10, alpha = 1)
+plot(cars.gcv)
+
+```
+
+## Plotting the RMSE
+
+also showing the difference between the lmin and l1se
+
+```{r, echo=FALSE}
+lmin = cars.gcv$lambda.min
+l1se = cars.gcv$lambda.1se
+cat("lambda min: ", lmin, "\n")
+cat("lambda 1se: ", l1se, "\n")
+crmse = sqrt(cars.gcv$cvm)
+plot(log(cars.gcv$lambda),crmse,xlab="log(lambda)", ylab="rmse")
+
+```
+
+## Getting the predictions on the test values
+
+using the min rmse from the plot
+
+```{r, echo=FALSE}
+cat("min rmse: ", min(crmse), "\n")
+cars.las = cars.gcv$glmnet.fit
+plot(cars.las)
+ypred = predict(cars.las, newx=xtest, s=c(lmin,l1se))
+```
+
+## Finding the Out of Sample Rmse
+
+```{r, echo=FALSE}
+oosrmse = sqrt(mean((cdte$price - ypred)^2))
+cat("out of sample rmse: ", oosrmse, "\n")
+
+```
